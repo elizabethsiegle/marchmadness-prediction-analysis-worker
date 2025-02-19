@@ -9,7 +9,26 @@
 	"compatibility_date": "2025-02-14",
 	"observability": {
 		"enabled": true
-	}
+	},
+  "compatibility_flags": [ "nodejs_compat" ],
+  "browser" : { "binding" : "MYBROWSER" },
+  "kv_namespaces": [
+    {
+      "binding": "BROWSER_KV_MM",
+      "id": "1bec03325f0845e1b31d51a02efbee96",
+      "preview_id": "8a9170ecfccd42e69a9bcbb04270a773"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "marchmadness-women",
+      "database_id": "d4d9026d-f390-4e6b-a57a-4dc3d0c4adfc"
+    }
+  ]
   /**
    * Smart Placement
    * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
