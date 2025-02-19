@@ -9,7 +9,7 @@ interface Env {
 	[key: string]: string;
   }
   
-  interface WomenD1Response {
+  interface NcaaD1Response {
 	data: {
 	  conference: string;
 	  standings: TeamStats[];
@@ -22,7 +22,8 @@ interface Env {
   
   interface CachedData {
 	timestamp: number;
-	data: WomenD1Response;
+	data: NcaaD1Response;
+	gender: 'men' | 'women';
   }
   
   export default {
@@ -96,7 +97,7 @@ interface Env {
 	  if (request.method === "POST" && url.pathname === "/analyze") {
 		try {
 		  const requestData = await request.json();
-		  const { teams } = requestData as { teams: string[] };
+		  const { teams, gender = 'women' } = requestData as { teams: string[], gender?: 'men' | 'women' };
 		  
 		  if (!Array.isArray(teams) || teams.length === 0) {
 			return new Response(JSON.stringify({ error: "Please provide at least one team name" }), { 
@@ -108,41 +109,42 @@ interface Env {
 			});
 		  }
   
-		  // ... rest of your analysis code ...
 		  const normalizedTeams = teams.map(team => team.toLowerCase().trim());
   
-		  // Check cache for base data
-		  let womend1Data: WomenD1Response['data'];
-		  const cachedResponse = await env.BROWSER_KV_MM.get('ncaa_data_cache', 'json') as CachedData | null;
+		  // Check cache for base data with gender-specific key
+		  let ncaaData: NcaaD1Response['data'];
+		  const cacheKey = `ncaa_data_cache_${gender}`;
+		  const cachedResponse = await env.BROWSER_KV_MM.get(cacheKey, 'json') as CachedData | null;
 		  const now = Date.now();
   
 		  if (cachedResponse && (now - cachedResponse.timestamp) < 3600000) {
-			womend1Data = cachedResponse.data.data;
+			ncaaData = cachedResponse.data.data;
 		  } else {
 			const apiUrl = "https://ncaa-api.fly.dev";
-			const womend1 = await fetch(`${apiUrl}/standings/basketball-women/d1`);
+			const response = await fetch(`${apiUrl}/standings/basketball-${gender}/d1`);
 			
-			if (!womend1.ok) {
-			  throw new Error(`API responded with status: ${womend1.status}`);
+			if (!response.ok) {
+			  throw new Error(`API responded with status: ${response.status}`);
 			}
   
-			const response = await womend1.json() as WomenD1Response;
-			womend1Data = response.data;
+			const data = await response.json() as NcaaD1Response;
+			ncaaData = data.data;
   
-			await env.BROWSER_KV_MM.put('ncaa_data_cache', JSON.stringify({
+			await env.BROWSER_KV_MM.put(cacheKey, JSON.stringify({
 			  timestamp: now,
-			  data: response
+			  data: data,
+			  gender
 			}));
 		  }
   
-		  const filteredData = womend1Data.map(conference => ({
+		  const filteredData = ncaaData.map(conference => ({
 			conference: conference.conference,
 			standings: conference.standings.filter(team => 
 			  normalizedTeams.includes(team.School?.toLowerCase().trim())
 			)
 		  })).filter(conference => conference.standings.length > 0);
   
-		  const prompt = `Analyze the performance of the following teams in NCAA Women's Basketball: ${teams.join(', ')}
+		  const prompt = `Analyze the performance of the following teams in NCAA ${gender === 'women' ? "Women's" : "Men's"} Basketball: ${teams.join(', ')}
 		  
 		  Here is their current standing data:
 			${JSON.stringify(filteredData, null, 2)}
@@ -296,6 +298,19 @@ interface Env {
             </div>
 
             <form id="teamForm" class="space-y-6">
+                <div class="mb-6">
+                    <label class="block text-lg font-medium text-gray-700 mb-3 text-center">Select Division</label>
+                    <div class="flex justify-center space-x-4">
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="gender" value="women" checked class="form-radio text-orange-500">
+                            <span class="ml-2 text-gray-700">Women's</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="gender" value="men" class="form-radio text-orange-500">
+                            <span class="ml-2 text-gray-700">Men's</span>
+                        </label>
+                    </div>
+                </div>
                 <div>
                     <label for="teams" class="block text-lg font-medium text-gray-700 mb-3 text-center">
                         Enter Team Names (One Per Line)
@@ -341,6 +356,8 @@ interface Env {
                 .map(team => team.trim())
                 .filter(team => team.length > 0);
             
+            const gender = document.querySelector('input[name="gender"]:checked').value;
+            
             if (teams.length === 0) {
                 alert('Please enter at least one team name');
                 return;
@@ -361,7 +378,7 @@ interface Env {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify({ teams })
+                    body: JSON.stringify({ teams, gender })
                 });
 
                 if (!response.ok) {
@@ -460,13 +477,24 @@ function getStatsPage() {
             </div>
 
             <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
-                NCAA Women's Basketball Statistics Visualizations
+                NCAA Basketball Statistics Visualizations
             </h1>
 			<p class="text-center text-gray-700 mb-8">
 			Data from <a href="https://www.ncaa.com/standings/basketball-women/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
 			</p>
 
             <div class="mb-8">
+                <div class="flex justify-center space-x-4 mb-6">
+                    <label class="inline-flex items-center">
+                        <input type="radio" name="gender" value="women" checked class="form-radio text-orange-500">
+                        <span class="ml-2 text-gray-700">Women's</span>
+                    </label>
+                    <label class="inline-flex items-center">
+                        <input type="radio" name="gender" value="men" class="form-radio text-orange-500">
+                        <span class="ml-2 text-gray-700">Men's</span>
+                    </label>
+                </div>
+
                 <label for="conferenceSelect" class="block text-lg font-medium text-gray-700 mb-2 text-center">
                     Select Conference
                 </label>
@@ -484,14 +512,16 @@ function getStatsPage() {
 
     <script>
         let currentChart = null;
+        let currentData = null;
 
-        async function fetchAndDisplayStats() {
+        async function fetchAndDisplayStats(gender = 'women') {
             try {
-                const response = await fetch('/api/stats');
+                const response = await fetch('/api/stats?gender=' + gender);
                 if (!response.ok) {
                     throw new Error('Failed to fetch stats');
                 }
                 const data = await response.json();
+                currentData = data;
                 
                 // Group by conference
                 const conferenceData = data.reduce((acc, team) => {
@@ -502,8 +532,10 @@ function getStatsPage() {
                     return acc;
                 }, {});
 
-                // Populate dropdown
+                // Clear and repopulate dropdown
                 const select = document.getElementById('conferenceSelect');
+                select.innerHTML = '<option value="">Select a conference...</option>';
+                
                 Object.keys(conferenceData).sort().forEach(conference => {
                     const option = document.createElement('option');
                     option.value = conference;
@@ -511,24 +543,51 @@ function getStatsPage() {
                     select.appendChild(option);
                 });
 
-                // Add event listener for dropdown
-                select.addEventListener('change', () => {
-                    const selectedConference = select.value;
-                    if (selectedConference) {
-                        createConferenceChart(selectedConference, conferenceData[selectedConference]);
-                    } else {
-                        // Clear chart if no conference is selected
-                        if (currentChart) {
-                            currentChart.destroy();
-                            currentChart = null;
-                        }
-                    }
-                });
-
+                // If there was a previously selected conference, try to reselect it
+                const previousSelection = select.getAttribute('data-previous-selection');
+                if (previousSelection && select.querySelector(\`option[value="\${previousSelection}"]\`)) {
+                    select.value = previousSelection;
+                    createConferenceChart(previousSelection, conferenceData[previousSelection]);
+                }
             } catch (error) {
                 console.error('Error:', error);
             }
         }
+
+        // Add event listeners
+        document.querySelectorAll('input[name="gender"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                fetchAndDisplayStats(e.target.value);
+            });
+        });
+
+        document.getElementById('conferenceSelect').addEventListener('change', (e) => {
+            const select = e.target;
+            const selectedConference = select.value;
+            select.setAttribute('data-previous-selection', selectedConference);
+            
+            if (selectedConference && currentData) {
+                const conferenceData = currentData.reduce((acc, team) => {
+                    if (!acc[team.conference_name]) {
+                        acc[team.conference_name] = [];
+                    }
+                    acc[team.conference_name].push(team);
+                    return acc;
+                }, {});
+                
+                if (conferenceData[selectedConference]) {
+                    createConferenceChart(selectedConference, conferenceData[selectedConference]);
+                }
+            } else {
+                if (currentChart) {
+                    currentChart.destroy();
+                    currentChart = null;
+                }
+            }
+        });
+
+        // Initial load
+        fetchAndDisplayStats('women');
 
         function createConferenceChart(conference, teams) {
             const canvas = document.getElementById('conferenceChart');
@@ -630,8 +689,6 @@ function getStatsPage() {
                 }
             });
         }
-
-        fetchAndDisplayStats();
     </script>
 	<footer>
 		Made w/ ❤️ in sf 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" 
