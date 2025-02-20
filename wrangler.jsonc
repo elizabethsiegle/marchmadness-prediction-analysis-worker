@@ -24,6 +24,11 @@
   },
   "d1_databases": [
     {
+      "binding": "DB_MEN",
+      "database_name": "marchmadness-men",
+      "database_id": "3388e2e5-a736-40ac-8e78-60acb8331422"
+    },
+    {
       "binding": "DB",
       "database_name": "marchmadness-women",
       "database_id": "d4d9026d-f390-4e6b-a57a-4dc3d0c4adfc"

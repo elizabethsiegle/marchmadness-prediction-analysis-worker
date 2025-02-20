@@ -1,210 +1,312 @@
 interface Env {
-	MYBROWSER: any;
-	BROWSER_KV_MM: KVNamespace;
-	AI: Ai;
-	DB: D1Database;
-  }
-  
-  interface TeamStats {
-	[key: string]: string;
-  }
-  
-  interface NcaaD1Response {
-	data: {
-	  conference: string;
-	  standings: TeamStats[];
-	}[];
-  }
-  
-  interface AiTextGenerationOutput {
-	response: string;
-  }
-  
-  interface CachedData {
-	timestamp: number;
-	data: NcaaD1Response;
-	gender: 'men' | 'women';
-  }
-  
-  export default {
-	async fetch(request: Request, env: Env) {
-	  const corsHeaders = {
-		"Access-Control-Allow-Origin": "*",
-		"Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
-		"Access-Control-Allow-Headers": "Content-Type, Accept",
-	  };
-  
-	  // Handle CORS preflight
-	  if (request.method === "OPTIONS") {
-		return new Response(null, { headers: corsHeaders });
-	  }
-  
-	  // Parse the URL
-	  const url = new URL(request.url);
-	  console.log(`Received ${request.method} request to ${url.pathname}`);
-  
-	  // Route handling
-	  if (request.method === "GET") {
-		if (url.pathname === "/" || url.pathname === "") {
-		  // Return the HTML form for the root path
-		  return new Response(getHtmlForm(), {
-			headers: {
-			  ...corsHeaders,
-			  "Content-Type": "text/html",
-			},
-		  });
-		}
-		
-		if (url.pathname === "/stats") {
-		  // Return the stats page
-		  return new Response(getStatsPage(), {
-			headers: {
-			  ...corsHeaders,
-			  "Content-Type": "text/html",
-			},
-		  });
-		}
-  
-		if (url.pathname === "/api/stats") {
-		  try {
-			const statsData = await env.DB
-			  .prepare(`
-				SELECT 
-					s.*,
-					c.name as conference_name
-				FROM standings s
-				JOIN conferences c ON s.conference_id = c.id
-				ORDER BY c.name, s.overall_pct DESC
-			`)
-			  .all();
-  
-			return new Response(JSON.stringify(statsData.results), {
-			  headers: {
-				...corsHeaders,
-				"Content-Type": "application/json"
-			  }
-			});
-		  } catch (error) {
-			console.error('Database error:', error);
-			return new Response(JSON.stringify({ error: 'Failed to fetch stats' }), {
-			  status: 500,
-			  headers: corsHeaders
-			});
-		  }
-		}
-	  }
-  
-	  if (request.method === "POST" && url.pathname === "/analyze") {
-		try {
-		  const requestData = await request.json();
-		  const { teams, gender = 'women' } = requestData as { teams: string[], gender?: 'men' | 'women' };
-		  
-		  if (!Array.isArray(teams) || teams.length === 0) {
-			return new Response(JSON.stringify({ error: "Please provide at least one team name" }), { 
-			  status: 400,
-			  headers: {
-				...corsHeaders,
-				"Content-Type": "application/json"
-			  }
-			});
-		  }
-  
-		  const normalizedTeams = teams.map(team => team.toLowerCase().trim());
-  
-		  // Check cache for base data with gender-specific key
-		  let ncaaData: NcaaD1Response['data'];
-		  const cacheKey = `ncaa_data_cache_${gender}`;
-		  const cachedResponse = await env.BROWSER_KV_MM.get(cacheKey, 'json') as CachedData | null;
-		  const now = Date.now();
-  
-		  if (cachedResponse && (now - cachedResponse.timestamp) < 3600000) {
-			ncaaData = cachedResponse.data.data;
-		  } else {
-			const apiUrl = "https://ncaa-api.fly.dev";
-			const response = await fetch(`${apiUrl}/standings/basketball-${gender}/d1`);
-			
-			if (!response.ok) {
-			  throw new Error(`API responded with status: ${response.status}`);
-			}
-  
-			const data = await response.json() as NcaaD1Response;
-			ncaaData = data.data;
-  
-			await env.BROWSER_KV_MM.put(cacheKey, JSON.stringify({
-			  timestamp: now,
-			  data: data,
-			  gender
-			}));
-		  }
-  
-		  const filteredData = ncaaData.map(conference => ({
-			conference: conference.conference,
-			standings: conference.standings.filter(team => 
-			  normalizedTeams.includes(team.School?.toLowerCase().trim())
-			)
-		  })).filter(conference => conference.standings.length > 0);
-  
-		  const prompt = `Analyze the performance of the following teams in NCAA ${gender === 'women' ? "Women's" : "Men's"} Basketball: ${teams.join(', ')}
-		  
-		  Here is their current standing data:
-			${JSON.stringify(filteredData, null, 2)}
-			
-			Please provide:
-			1. Current performance analysis for each requested team
-			2. Their position within their respective conferences
-			3. Notable streaks or trends
-			4. Comparative analysis between the requested teams if multiple teams are provided`;
-  
-		  const messages = [
-			{ role: "system", content: "You are an esteemed basketball analyst focusing on NCAA Women's Basketball. Provide clear, succinct analysis with specific statistics and context." },
-			{ role: "user", content: prompt },
-		  ];
-		  
-		  const aiResponse = await env.AI.run(
-			"@cf/meta/llama-3.3-70b-instruct-fp8-fast", 
-			{ max_tokens: 8196, messages }
-		  ) as AiTextGenerationOutput;
-  
-		  return new Response(JSON.stringify({
-			response: aiResponse.response,
-			teams: teams,
-			filteredData
-		  }), {
-			headers: {
-			  ...corsHeaders,
-			  "Content-Type": "application/json"
-			}
-		  });
-  
-		} catch (error) {
-		  console.error('Error:', error);
-		  return new Response(JSON.stringify({ error: error }), { 
-			status: 500,
-			headers: {
-			  ...corsHeaders,
-			  "Content-Type": "application/json"
-			}
-		  });
-		}
-	  }
-  
-	  // If no route matches, return 404
-	  return new Response("Not Found", { 
-		status: 404,
-		headers: corsHeaders
-	  });
-	}
-  };
-  
-  // Function to return the HTML form
-  function getHtmlForm() {
-	return `
+    MYBROWSER: any;
+    BROWSER_KV_MM: KVNamespace;
+    AI: Ai;
+    DB: D1Database;
+    DB_MEN: D1Database;
+}
+
+interface TeamStats {
+    [key: string]: string;
+}
+
+interface NcaaD1Response {
+    data: {
+        conference: string;
+        standings: TeamStats[];
+    }[];
+}
+
+interface AiTextGenerationOutput {
+    response: string;
+}
+
+interface CachedData {
+    timestamp: number;
+    data: NcaaD1Response;
+    gender: 'men' | 'women';
+}
+
+export default {
+    async fetch(request: Request, env: Env) {
+        const corsHeaders = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Accept",
+        };
+
+        // Handle CORS preflight
+        if (request.method === "OPTIONS") {
+            return new Response(null, { headers: corsHeaders });
+        }
+
+        // Parse the URL
+        const url = new URL(request.url);
+        console.log(`Received ${request.method} request to ${url.pathname}`);
+
+        // Route handling
+        if (request.method === "GET") {
+            if (url.pathname === "/" || url.pathname === "") {
+                // Return the HTML form for the root path
+                return new Response(getHtmlForm(), {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "text/html",
+                    },
+                });
+            }
+
+            if (url.pathname === "/stats") {
+                // Return the stats page
+                return new Response(getStatsPage(), {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "text/html",
+                    },
+                });
+            }
+
+            if (url.pathname === "/api/stats") {
+                try {
+                    const gender = url.searchParams.get("gender") || "women"; // Default to women's data
+                    console.log(`Fetching stats for gender: ${gender}`);
+                    const db = gender === "men" ? env.DB_MEN : env.DB; // Use DB_MEN for men's data, DB for women's data
+                    console.log(`Using database: ${gender === "men" ? "DB_MEN" : "DB"}`);
+                    const statsData = await db
+                        .prepare(`
+                            SELECT 
+                                s.*,
+                                c.name as conference_name
+                            FROM standings s
+                            JOIN conferences c ON s.conference_id = c.id
+                            ORDER BY c.name, s.overall_pct DESC
+                        `)
+                        .all();
+
+                    return new Response(JSON.stringify(statsData.results), {
+                        headers: {
+                            ...corsHeaders,
+                            "Content-Type": "application/json"
+                        }
+                    });
+                } catch (error) {
+                    console.error('Database error:', error);
+                    return new Response(JSON.stringify({ error: 'Failed to fetch stats' }), {
+                        status: 500,
+                        headers: corsHeaders
+                    });
+                }
+            }
+
+            if (url.pathname === "/init-db-men") {
+                try {
+                    await initializeMenDatabase(env.DB_MEN);
+                    return new Response(JSON.stringify({ message: "Men's database initialized successfully" }), {
+                        headers: {
+                            ...corsHeaders,
+                            "Content-Type": "application/json"
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error initializing men\'s database:', error);
+                    return new Response(JSON.stringify({ error: 'Failed to initialize men\'s database' }), {
+                        status: 500,
+                        headers: corsHeaders
+                    });
+                }
+            }
+        }
+
+        if (request.method === "POST" && url.pathname === "/analyze") {
+            try {
+                const requestData = await request.json();
+                const { teams, gender = 'women' } = requestData as { teams: string[], gender?: 'men' | 'women' };
+
+                if (!Array.isArray(teams) || teams.length === 0) {
+                    return new Response(JSON.stringify({ error: "Please provide at least one team name" }), {
+                        status: 400,
+                        headers: {
+                            ...corsHeaders,
+                            "Content-Type": "application/json"
+                        }
+                    });
+                }
+
+                const normalizedTeams = teams.map(team => team.toLowerCase().trim());
+
+                // Check cache for base data with gender-specific key
+                let ncaaData: NcaaD1Response['data'];
+                const cacheKey = `ncaa_data_cache_${gender}`;
+                const cachedResponse = await env.BROWSER_KV_MM.get(cacheKey, 'json') as CachedData | null;
+                const now = Date.now();
+
+                if (cachedResponse && (now - cachedResponse.timestamp) < 3600000) {
+                    ncaaData = cachedResponse.data.data;
+                } else {
+                    const apiUrl = "https://ncaa-api.fly.dev";
+                    const response = await fetch(`${apiUrl}/standings/basketball-${gender}/d1`);
+
+                    if (!response.ok) {
+                        throw new Error(`API responded with status: ${response.status}`);
+                    }
+
+                    const data = await response.json() as NcaaD1Response;
+                    ncaaData = data.data;
+
+                    await env.BROWSER_KV_MM.put(cacheKey, JSON.stringify({
+                        timestamp: now,
+                        data: data,
+                        gender
+                    }));
+                }
+
+                const filteredData = ncaaData.map(conference => ({
+                    conference: conference.conference,
+                    standings: conference.standings.filter(team =>
+                        normalizedTeams.includes(team.School?.toLowerCase().trim())
+                    )
+                })).filter(conference => conference.standings.length > 0);
+
+                const prompt = `Analyze the performance of the following teams in NCAA ${gender === 'women' ? "Women's" : "Men's"} Basketball: ${teams.join(', ')}
+
+                Here is their current standing data:
+                    ${JSON.stringify(filteredData, null, 2)}
+
+                    Please provide:
+                    1. Current performance analysis for each requested team
+                    2. Their position within their respective conferences
+                    3. Notable streaks or trends
+                    4. Comparative analysis between the requested teams if multiple teams are provided`;
+
+                const messages = [
+                    { role: "system", content: "You are an esteemed basketball analyst focusing on NCAA Basketball. Provide clear, succinct analysis with specific statistics and context." },
+                    { role: "user", content: prompt },
+                ];
+
+                const aiResponse = await env.AI.run(
+                    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                    { max_tokens: 8196, messages }
+                ) as AiTextGenerationOutput;
+
+                return new Response(JSON.stringify({
+                    response: aiResponse.response,
+                    teams: teams,
+                    filteredData
+                }), {
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json"
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error:', error);
+                return new Response(JSON.stringify({ error: error }), {
+                    status: 500,
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json"
+                    }
+                });
+            }
+        }
+
+        // If no route matches, return 404
+        return new Response("Not Found", {
+            status: 404,
+            headers: corsHeaders
+        });
+    }
+};
+
+// Function to initialize the men's database
+async function initializeMenDatabase(db: D1Database) {
+    try {
+        console.log("Fetching data from NCAA API...");
+        const apiUrl = "https://ncaa-api.fly.dev";
+        const response = await fetch(`${apiUrl}/standings/basketball-men/d1`);
+
+        if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}`);
+        }
+
+        console.log("Data fetched successfully. Parsing JSON...");
+        const data = await response.json() as NcaaD1Response;
+        console.log("API Response:", JSON.stringify(data, null, 2));
+
+        console.log("Clearing existing data from DB_MEN...");
+        await db.prepare("DELETE FROM standings").run();
+        await db.prepare("DELETE FROM conferences").run();
+        console.log("Existing data cleared from DB_MEN.");
+
+        console.log("Inserting new data into DB_MEN...");
+        for (const conference of data.data) {
+            const { conference: conferenceName, standings } = conference;
+
+            if (!conferenceName || !standings) {
+                console.warn("Skipping invalid conference:", conference);
+                continue;
+            }
+
+            console.log(`Inserting conference: ${conferenceName}`);
+            const conferenceResult = await db.prepare(`
+                INSERT INTO conferences (name) VALUES (?)
+            `).bind(conferenceName).run();
+
+            const conferenceId = conferenceResult.meta.last_row_id;
+            console.log(`Conference inserted with ID: ${conferenceId}`);
+
+            for (const team of standings) {
+                // Validate required fields
+                if (!team.School || team["Overall W"] === undefined || team["Overall L"] === undefined) {
+                    console.warn("Skipping invalid team:", team);
+                    continue;
+                }
+
+                // Map API fields to database fields
+                const overallWins = parseInt(team["Overall W"], 10);
+                const overallLosses = parseInt(team["Overall L"], 10);
+                const overallPct = parseFloat(team["Overall PCT"]) || 0;
+                const conferenceWins = parseInt(team["Conference W"], 10) || 0;
+                const conferenceLosses = parseInt(team["Conference L"], 10) || 0;
+                const conferencePct = parseFloat(team["Conference PCT"]) || 0;
+
+                console.log(`Inserting team: ${team.School} into conference: ${conferenceName}`);
+                await db.prepare(`
+                    INSERT INTO standings (
+                        conference_id, school, overall_wins, overall_losses, overall_pct,
+                        conference_wins, conference_losses, conference_pct
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `).bind(
+                    conferenceId,
+                    team.School,
+                    overallWins,
+                    overallLosses,
+                    overallPct,
+                    conferenceWins,
+                    conferenceLosses,
+                    conferencePct
+                ).run();
+                console.log(`Team inserted: ${team.School}`);
+            }
+        }
+
+        console.log("Data insertion into DB_MEN completed successfully.");
+    } catch (error) {
+        console.error("Error initializing men's database:", error);
+        throw error;
+    }
+}
+
+// Function to return the HTML form
+function getHtmlForm() {
+    return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCAA Women's Basketball Analysis</title>
+    <title>NCAA Basketball Analysis</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap');
@@ -212,16 +314,16 @@ interface Env {
         * {
             font-family: 'Comic Neue', cursive;
         }
-		body {
-			margin: 0;
-			font-family: system-ui;
-			min-height: 100vh;
-			background: linear-gradient(135deg, #1a472a, #2d5a40);
-			color: white;
-			display: flex;
-			flex-direction: column;
-			padding: 0;
-		}
+        body {
+            margin: 0;
+            font-family: system-ui;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a472a, #2d5a40);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
         
         @keyframes bounce {
             0%, 100% { transform: translateY(0); }
@@ -260,14 +362,14 @@ interface Env {
             margin: 0 auto;
             max-width: 800px;
         }
-		footer {
-			text-align: center;
-			padding: 1rem;
-			color: rgba(255, 255, 255, 0.8);
-			font-size: 0.9rem;
-			background-color: rgba(178, 34, 34, 0.3);
-			width: 100%;
-			margin-top: auto;
+        footer {
+            text-align: center;
+            padding: 1rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            background-color: rgba(178, 34, 34, 0.3);
+            width: 100%;
+            margin-top: auto;
         }
     </style>
 </head>
@@ -278,11 +380,11 @@ interface Env {
     <div class="content-wrapper">
         <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-8 relative">
             <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
-                NCAA Women's Basketball Analysis
+                NCAA Basketball Analysis
             </h1>
-			<p class="text-center text-gray-700 mb-8">
-			Data from <a href="https://www.ncaa.com/standings/basketball-women/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
-			</p>
+            <p class="text-center text-gray-700 mb-8">
+            Data from <a href="https://www.ncaa.com/standings/basketball-{gender}/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
+            </p>
             
             <div class="flex justify-center space-x-4 mb-8">
                 <button 
@@ -321,9 +423,9 @@ interface Env {
                         rows="5" 
                         class="w-full p-4 border-2 border-orange-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 bg-white/50 backdrop-blur-sm text-center"
                         placeholder="Example:
-							South Carolina
-							Stanford
-							UConn"></textarea>
+                            South Carolina
+                            Stanford
+                            UConn"></textarea>
                 </div>
                 <div class="flex flex-col items-center space-y-8">
                     <button 
@@ -398,21 +500,21 @@ interface Env {
             }
         });
     </script>
-	<footer>
-		Made w/ ❤️ in sf 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" 
-			style="color: white; text-decoration: underline;"
-			target="_blank">
-			Cloudflare Workers AI
-		</a> -> 
-		<a href="https://github.com/elizabethsiegle/marchmadness-prediction-analysis-worker" 
-			style="color: white; text-decoration: underline;"
-			target="_blank">
-			GitHub
-		</a>
-	</footer>
+    <footer>
+        Made w/ ❤️ in sf 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" 
+            style="color: white; text-decoration: underline;"
+            target="_blank">
+            Cloudflare Workers AI, D1
+        </a> -> 
+        <a href="https://github.com/elizabethsiegle/marchmadness-prediction-analysis-worker" 
+            style="color: white; text-decoration: underline;"
+            target="_blank">
+            GitHub
+        </a>
+    </footer>
 </body>
 </html>
-	`;
+    `;
 }
 
 function getStatsPage() {
@@ -422,7 +524,7 @@ function getStatsPage() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCAA Women's Basketball Data Visualizations</title>
+    <title>NCAA Basketball Data Visualizations</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -431,16 +533,16 @@ function getStatsPage() {
         * {
             font-family: 'Comic Neue', cursive;
         }
-		body {
-			margin: 0;
-			font-family: system-ui;
-			min-height: 100vh;
-			background: linear-gradient(135deg, #1a472a, #2d5a40);
-			color: white;
-			display: flex;
-			flex-direction: column;
-			padding: 0;
-		}
+        body {
+            margin: 0;
+            font-family: system-ui;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a472a, #2d5a40);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
         
         .chart-container {
             background: rgba(255, 255, 255, 0.9);
@@ -449,14 +551,14 @@ function getStatsPage() {
             margin: 1rem 0;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-		footer {
-			text-align: center;
-			padding: 1rem;
-			color: rgba(255, 255, 255, 0.8);
-			font-size: 0.9rem;
-			background-color: rgba(178, 34, 34, 0.3);
-			width: 100%;
-			margin-top: auto;
+        footer {
+            text-align: center;
+            padding: 1rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            background-color: rgba(178, 34, 34, 0.3);
+            width: 100%;
+            margin-top: auto;
         }
     </style>
 </head>
@@ -479,9 +581,9 @@ function getStatsPage() {
             <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
                 NCAA Basketball Statistics Visualizations
             </h1>
-			<p class="text-center text-gray-700 mb-8">
-			Data from <a href="https://www.ncaa.com/standings/basketball-women/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
-			</p>
+            <p class="text-center text-gray-700 mb-8">
+            Data from <a href="https://www.ncaa.com/standings/basketball-women/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
+            </p>
 
             <div class="mb-8">
                 <div class="flex justify-center space-x-4 mb-6">
@@ -514,7 +616,7 @@ function getStatsPage() {
         let currentChart = null;
         let currentData = null;
 
-        async function fetchAndDisplayStats(gender = 'women') {
+        async function fetchAndDisplayStats(gender) {
             try {
                 const response = await fetch('/api/stats?gender=' + gender);
                 if (!response.ok) {
@@ -557,6 +659,7 @@ function getStatsPage() {
         // Add event listeners
         document.querySelectorAll('input[name="gender"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
+                console.log(e.target.value);
                 fetchAndDisplayStats(e.target.value);
             });
         });
@@ -587,7 +690,7 @@ function getStatsPage() {
         });
 
         // Initial load
-        fetchAndDisplayStats('women');
+        // fetchAndDisplayStats('women');
 
         function createConferenceChart(conference, teams) {
             const canvas = document.getElementById('conferenceChart');
@@ -690,18 +793,18 @@ function getStatsPage() {
             });
         }
     </script>
-	<footer>
-		Made w/ ❤️ in sf 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" 
-			style="color: white; text-decoration: underline;"
-			target="_blank">
-			Cloudflare Workers AI
-		</a> -> 
-		<a href="https://github.com/elizabethsiegle/marchmadness-prediction-analysis-worker" 
-			style="color: white; text-decoration: underline;"
-			target="_blank">
-			GitHub
-		</a>
-	</footer>
+    <footer>
+        Made w/ ❤️ in sf 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" 
+            style="color: white; text-decoration: underline;"
+            target="_blank">
+            Cloudflare Workers AI, D1
+        </a> -> 
+        <a href="https://github.com/elizabethsiegle/marchmadness-prediction-analysis-worker" 
+            style="color: white; text-decoration: underline;"
+            target="_blank">
+            GitHub
+        </a>
+    </footer>
 </body>
 </html>
     `;
