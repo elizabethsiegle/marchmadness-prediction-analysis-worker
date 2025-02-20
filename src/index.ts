@@ -309,83 +309,206 @@ function getHtmlForm() {
     <title>NCAA Basketball Analysis</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap');
-        
-        * {
-            font-family: 'Comic Neue', cursive;
-        }
-        body {
-            margin: 0;
-            font-family: system-ui;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #1a472a, #2d5a40);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            padding: 0;
-        }
-        
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-20px); }
-        }
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
-        @keyframes moveLeftRight {
-            0% { left: 5%; }
-            50% { left: 20%; }
-            100% { left: 5%; }
-        }
+    * {
+        font-family: 'Poppins', sans-serif;
+    }
 
-        @keyframes moveRightLeft {
-            0% { right: 5%; }
-            50% { right: 20%; }
-            100% { right: 5%; }
-        }
+    body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #1a472a, #2d5a40);
+        color: #2d3748; /* Darker text for better readability */
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+    }
 
-        .bouncing-ball {
-            position: fixed;
-            font-size: 50px;
-            user-select: none;
-            z-index: -1;
-            bottom: 20px;
-        }
-        .bouncing-ball:nth-child(1) { 
-            left: 5%; 
-            animation: bounce 1.5s infinite, moveLeftRight 15s infinite;
-        }
-        .bouncing-ball:nth-child(2) { 
-            right: 5%; 
-            animation: bounce 2s infinite, moveRightLeft 12s infinite;
-        }
-        .content-wrapper {
-            text-align: center;
-            margin: 0 auto;
-            max-width: 800px;
-        }
-        footer {
-            text-align: center;
-            padding: 1rem;
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.9rem;
-            background-color: rgba(178, 34, 34, 0.3);
-            width: 100%;
-            margin-top: auto;
-        }
-    </style>
+    .bouncing-ball {
+        position: fixed;
+        font-size: 50px;
+        user-select: none;
+        z-index: -1;
+        bottom: 20px;
+        animation: bounce 2s infinite, moveLeftRight 15s infinite;
+    }
+
+    .bouncing-ball:nth-child(1) {
+        left: 5%;
+    }
+
+    .bouncing-ball:nth-child(2) {
+        right: 5%;
+        animation-delay: 1s;
+    }
+
+    @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-20px); }
+    }
+
+    @keyframes moveLeftRight {
+        0% { left: 5%; }
+        50% { left: 20%; }
+        100% { left: 5%; }
+    }
+
+    @keyframes moveRightLeft {
+        0% { right: 5%; }
+        50% { right: 20%; }
+        100% { right: 5%; }
+    }
+
+    .content-wrapper {
+        text-align: center;
+        margin: 0 auto;
+        max-width: 800px;
+        padding: 2rem;
+    }
+
+    .card {
+        background: rgba(255, 255, 255, 0.95); /* Light background for contrast */
+        backdrop-filter: blur(10px);
+        border-radius: 1.5rem;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+        padding: 2.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .card h1 {
+        font-size: 2.75rem;
+        font-weight: 700;
+        background: linear-gradient(45deg, #ff7e5f, #feb47b);
+        -webkit-background-clip: text;
+        color: transparent;
+        margin-bottom: 1.5rem;
+    }
+
+    .card p {
+        color: #4a5568; /* Dark gray for better readability */
+        font-size: 1.1rem;
+        margin-bottom: 2rem;
+    }
+
+    .card a {
+        color: #3182ce !important; /* Blue for links */
+        text-decoration: underline;
+    }
+
+    .card a:hover {
+        color: #feb47b !important; /* Orange on hover */
+    }
+
+    .card a:active {
+        color: #ff69b4 !important; /* Pink when clicked */
+    }
+
+    .card button {
+        transition: all 0.3s ease;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .card button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .card textarea {
+        min-width: 300px;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(4px);
+        border: 2px solid #fb923c;
+        border-radius: 0.75rem;
+        transition: border-color 0.3s ease;
+        font-size: 1rem;
+        padding: 1rem;
+        color: #2d3748;
+        text-align: center;
+    }
+
+    .card textarea::placeholder {
+        color: #6b7280;
+        opacity: 1;
+    }
+
+    .card textarea:focus {
+        outline: none;
+        border-color: #f97316;
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+    }
+
+    .loading-spinner {
+        border-top-color: #feb47b;
+        border-width: 3px;
+    }
+
+    .result-box {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-top: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .result-box p {
+        color: #4a5568; /* Dark gray for better readability */
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+
+    footer {
+        background: rgba(178, 34, 34, 0.3);
+        color: rgba(255, 255, 255, 0.9);
+        padding: 1.5rem;
+        text-align: center;
+        margin-top: auto;
+        font-size: 0.95rem;
+    }
+
+    footer a {
+        color: white;
+        text-decoration: underline;
+        font-weight: 600;
+    }
+
+    footer a:hover {
+        color: #feb47b; /* Orange on hover */
+    }
+
+    footer a:active {
+        color: #ff69b4; /* Pink when clicked */
+    }
+
+    .form-radio {
+        accent-color: #feb47b;
+    }
+
+    .form-radio:checked {
+        background-color: #feb47b;
+    }
+
+    .form-radio:focus {
+        box-shadow: 0 0 0 3px rgba(254, 180, 123, 0.2);
+    }
+</style>
 </head>
 <body class="bg-gradient-to-br from-orange-100 to-orange-200 min-h-screen p-8">
     <div class="bouncing-ball">🏀</div>
     <div class="bouncing-ball">🏀</div>
     
     <div class="content-wrapper">
-        <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-8 relative">
-            <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
-                NCAA Basketball Analysis
-            </h1>
-            <p class="text-center text-gray-700 mb-8">
-            Data from <a href="https://www.ncaa.com/standings/basketball-{gender}/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
-            </p>
-            
+        <div class="card">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-8 relative">
+                <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
+                    NCAA Basketball Analysis
+                </h1>
+                <p class="text-center text-gray-700 mb-8">
+                    Data from <a href="https://www.ncaa.com/standings/basketball-{gender}/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
+                </p>
+            </div>
             <div class="flex justify-center space-x-4 mb-8">
                 <button 
                     onclick="window.location.href='/'"
@@ -418,14 +541,13 @@ function getHtmlForm() {
                         Enter Team Names (One Per Line)
                     </label>
                     <textarea 
-                        id="teams" 
-                        name="teams" 
-                        rows="5" 
-                        class="w-full p-4 border-2 border-orange-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 bg-white/50 backdrop-blur-sm text-center"
-                        placeholder="Example:
-                            South Carolina
-                            Stanford
-                            UConn"></textarea>
+        id="teams" 
+        name="teams" 
+        rows="5" 
+        placeholder="Example: South Carolina 
+        Stanford 
+        UConn"
+    ></textarea>
                 </div>
                 <div class="flex flex-col items-center space-y-8">
                     <button 
@@ -524,66 +646,204 @@ function getStatsPage() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NCAA Basketball Data Visualizations</title>
+    <title>NCAA Basketball Statistics</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap');
-        
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
         * {
-            font-family: 'Comic Neue', cursive;
+            font-family: 'Poppins', sans-serif;
         }
+
         body {
             margin: 0;
-            font-family: system-ui;
             min-height: 100vh;
             background: linear-gradient(135deg, #1a472a, #2d5a40);
-            color: white;
+            color: #2d3748; /* Darker text for better readability */
             display: flex;
             flex-direction: column;
             padding: 0;
         }
-        
+
+        .bouncing-ball {
+            position: fixed;
+            font-size: 50px;
+            user-select: none;
+            z-index: -1;
+            bottom: 20px;
+            animation: bounce 2s infinite, moveLeftRight 15s infinite;
+        }
+
+        .bouncing-ball:nth-child(1) {
+            left: 5%;
+        }
+
+        .bouncing-ball:nth-child(2) {
+            right: 5%;
+            animation-delay: 1s;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        @keyframes moveLeftRight {
+            0% { left: 5%; }
+            50% { left: 20%; }
+            100% { left: 5%; }
+        }
+
+        @keyframes moveRightLeft {
+            0% { right: 5%; }
+            50% { right: 20%; }
+            100% { right: 5%; }
+        }
+
+        .content-wrapper {
+            text-align: center;
+            margin: 0 auto;
+            max-width: 800px;
+            padding: 2rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95); /* Light background for contrast */
+            backdrop-filter: blur(10px);
+            border-radius: 1.5rem;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+            padding: 2.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .card h1 {
+            font-size: 2.75rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 1.5rem;
+        }
+
+        .card p {
+            color: #4a5568; /* Dark gray for better readability */
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
+
+        .card a {
+            color: #3182ce; /* Blue for links */
+            text-decoration: underline;
+        }
+
+        .card a:hover {
+            color: #feb47b; /* Orange on hover */
+        }
+
+        .card a:active {
+            color: #ff69b4; /* Pink when clicked */
+        }
+
+        .card button {
+            transition: all 0.3s ease;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .card button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .loading-spinner {
+            border-top-color: #feb47b;
+            border-width: 3px;
+        }
+
+        .result-box {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .result-box p {
+            color: #4a5568; /* Dark gray for better readability */
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        footer {
+            background: rgba(178, 34, 34, 0.3);
+            color: rgba(255, 255, 255, 0.9);
+            padding: 1.5rem;
+            text-align: center;
+            margin-top: auto;
+            font-size: 0.95rem;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: underline;
+            font-weight: 600;
+        }
+
+        footer a:hover {
+            color: #feb47b; /* Orange on hover */
+        }
+
+        footer a:active {
+            color: #ff69b4; /* Pink when clicked */
+        }
+
+        .form-radio {
+            accent-color: #feb47b;
+        }
+
+        .form-radio:checked {
+            background-color: #feb47b;
+        }
+
+        .form-radio:focus {
+            box-shadow: 0 0 0 3px rgba(254, 180, 123, 0.2);
+        }
+
         .chart-container {
             background: rgba(255, 255, 255, 0.9);
             border-radius: 1rem;
-            padding: 1rem;
-            margin: 1rem 0;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        footer {
-            text-align: center;
-            padding: 1rem;
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.9rem;
-            background-color: rgba(178, 34, 34, 0.3);
-            width: 100%;
-            margin-top: auto;
         }
     </style>
 </head>
 <body class="bg-gradient-to-br from-orange-100 to-orange-200 min-h-screen p-8">
-    <div class="max-w-6xl mx-auto relative">
-        <div class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-8">
+    <div class="bouncing-ball">🏀</div>
+    <div class="bouncing-ball">🏀</div>
+
+    <div class="content-wrapper">
+        <div class="card">
+            <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
+                NCAA Basketball Statistics
+            </h1>
+            <p class="text-center text-gray-700 mb-8">
+                Data from <a href="https://www.ncaa.com/standings/basketball-women/d1" class="underline" target="_blank">ncaa.com</a>
+            </p>
+
             <div class="flex justify-center space-x-4 mb-8">
                 <button 
-                    onclick="window.location.href='/'"
-                    class="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors">
+                    onclick="window.location.href='/'" 
+                    class="px-6 py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-600">
                     Analysis
                 </button>
                 <button 
-                    onclick="window.location.href='/stats'"
-                    class="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors">
+                    onclick="window.location.href='/stats'" 
+                    class="px-6 py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-lg hover:from-orange-500 hover:to-orange-600">
                     Statistics
                 </button>
             </div>
-
-            <h1 class="text-4xl font-bold mb-8 text-center bg-gradient-to-r from-orange-600 to-orange-400 bg-clip-text text-transparent">
-                NCAA Basketball Statistics Visualizations
-            </h1>
-            <p class="text-center text-gray-700 mb-8">
-            Data from <a href="https://www.ncaa.com/standings/basketball-women/d1" style="color: white; text-decoration: underline;" target="_blank">ncaa.com/standings/basketball-women/d1</a>
-            </p>
 
             <div class="mb-8">
                 <div class="flex justify-center space-x-4 mb-6">
@@ -606,11 +866,16 @@ function getStatsPage() {
                 </select>
             </div>
 
-            <div id="chartContainer" class="chart-container p-4 bg-white rounded-lg shadow">
+            <div id="chartContainer" class="chart-container">
                 <canvas id="conferenceChart"></canvas>
             </div>
         </div>
     </div>
+
+    <footer>
+        Made with ❤️ in SF 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" target="_blank">Cloudflare Workers AI, D1</a> →
+        <a href="https://github.com/elizabethsiegle/marchmadness-prediction-analysis-worker" target="_blank">GitHub</a>
+    </footer>
 
     <script>
         let currentChart = null;
@@ -659,7 +924,6 @@ function getStatsPage() {
         // Add event listeners
         document.querySelectorAll('input[name="gender"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
-                console.log(e.target.value);
                 fetchAndDisplayStats(e.target.value);
             });
         });
@@ -690,7 +954,7 @@ function getStatsPage() {
         });
 
         // Initial load
-        // fetchAndDisplayStats('women');
+        fetchAndDisplayStats('women');
 
         function createConferenceChart(conference, teams) {
             const canvas = document.getElementById('conferenceChart');
@@ -793,18 +1057,6 @@ function getStatsPage() {
             });
         }
     </script>
-    <footer>
-        Made w/ ❤️ in sf 🌁 using <a href="https://developers.cloudflare.com/workers-ai/" 
-            style="color: white; text-decoration: underline;"
-            target="_blank">
-            Cloudflare Workers AI, D1
-        </a> -> 
-        <a href="https://github.com/elizabethsiegle/marchmadness-prediction-analysis-worker" 
-            style="color: white; text-decoration: underline;"
-            target="_blank">
-            GitHub
-        </a>
-    </footer>
 </body>
 </html>
     `;
