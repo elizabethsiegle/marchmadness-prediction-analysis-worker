@@ -23,7 +23,9 @@ interface AiTextGenerationOutput {
 
 interface CachedData {
     timestamp: number;
-    data: NcaaD1Response;
+    response: string;
+    teams: string[];
+    stats: any[];
     gender: 'men' | 'women';
 }
 
@@ -125,6 +127,18 @@ export default {
                 if (!Array.isArray(teams) || teams.length === 0) {
                     return new Response(JSON.stringify({ error: "Please provide at least one team name" }), {
                         status: 400,
+                        headers: corsHeaders
+                    });
+                }
+
+                const normalizedTeams = teams.map(team => team.toLowerCase().trim());
+                const cacheKey = `analysis_${gender}_${normalizedTeams.sort().join('_')}`;
+
+                // Try cache first
+                const cachedAnalysis = await env.BROWSER_KV_MM.get(cacheKey, 'json') as CachedData | null;
+                if (cachedAnalysis && (Date.now() - cachedAnalysis.timestamp) < 3600000) {
+                    console.log('Returning cached analysis');
+                    return new Response(JSON.stringify(cachedAnalysis), {
                         headers: {
                             ...corsHeaders,
                             "Content-Type": "application/json"
@@ -132,81 +146,101 @@ export default {
                     });
                 }
 
-                const normalizedTeams = teams.map(team => team.toLowerCase().trim());
+                // Get stats data
+                const db = gender === 'men' ? env.DB_MEN : env.DB;
+                const statsData = await db
+                    .prepare(`
+                        SELECT 
+                            s.*,
+                            c.name as conference_name
+                        FROM standings s
+                        JOIN conferences c ON s.conference_id = c.id
+                        WHERE LOWER(s.school) IN (${normalizedTeams.map(() => '?').join(',')})
+                    `)
+                    .bind(...normalizedTeams)
+                    .all();
 
-                // Check cache for base data with gender-specific key
-                let ncaaData: NcaaD1Response['data'];
-                const cacheKey = `ncaa_data_cache_${gender}`;
-                const cachedResponse = await env.BROWSER_KV_MM.get(cacheKey, 'json') as CachedData | null;
-                const now = Date.now();
+                // Function to attempt AI analysis with timeout and single-team processing
+                async function getAiAnalysis(timeout = 30000) {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-                if (cachedResponse && (now - cachedResponse.timestamp) < 3600000) {
-                    ncaaData = cachedResponse.data.data;
-                } else {
-                    const apiUrl = "https://ncaa-api.fly.dev";
-                    const response = await fetch(`${apiUrl}/standings/basketball-${gender}/d1`);
+                    try {
+                        // Process one team at a time
+                        const analyses = await Promise.all(statsData.results.map(async (team) => {
+                            try {
+                                const teamResponse = await env.AI.run(
+                                    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                                    { 
+                                        max_tokens: 2048,
+                                        messages: [
+                                            { role: "system", content: "You are a basketball analyst. Provide a very brief analysis." },
+                                            { 
+                                                role: "user", 
+                                                content: `Quick analysis of ${team.school} (${gender}'s):\nConference: ${team.conference_name}\nOverall: ${team.overall_wins}-${team.overall_losses}\nConference: ${team.conference_wins}-${team.conference_losses}\n\nProvide a 2-3 sentence analysis.` 
+                                            }
+                                        ]
+                                    }
+                                ) as AiTextGenerationOutput;
+                                return `${team.school}: ${teamResponse.response}`;
+                            } catch (error) {
+                                console.error(`Error analyzing ${team.school}:`, error);
+                                return `${team.school}: Stats only - Overall: ${team.overall_wins}-${team.overall_losses}, Conference: ${team.conference_wins}-${team.conference_losses}`;
+                            }
+                        }));
 
-                    if (!response.ok) {
-                        throw new Error(`API responded with status: ${response.status}`);
+                        // Combine individual analyses
+                        return {
+                            response: analyses.join('\n\n')
+                        };
+                    } finally {
+                        clearTimeout(timeoutId);
                     }
-
-                    const data = await response.json() as NcaaD1Response;
-                    ncaaData = data.data;
-
-                    await env.BROWSER_KV_MM.put(cacheKey, JSON.stringify({
-                        timestamp: now,
-                        data: data,
-                        gender
-                    }));
                 }
 
-                const filteredData = ncaaData.map(conference => ({
-                    conference: conference.conference,
-                    standings: conference.standings.filter(team =>
-                        normalizedTeams.includes(team.School?.toLowerCase().trim())
-                    )
-                })).filter(conference => conference.standings.length > 0);
+                try {
+                    const aiResponse = await getAiAnalysis();
+                    const response: CachedData = {
+                        timestamp: Date.now(),
+                        response: aiResponse.response,
+                        teams: teams,
+                        stats: statsData.results,
+                        gender
+                    };
 
-                const prompt = `Analyze the performance of the following teams in NCAA ${gender === 'women' ? "Women's" : "Men's"} Basketball: ${teams.join(', ')}
+                    // Cache successful response
+                    await env.BROWSER_KV_MM.put(cacheKey, JSON.stringify(response), { expirationTtl: 3600 });
 
-                Here is their current standing data:
-                    ${JSON.stringify(filteredData, null, 2)}
+                    return new Response(JSON.stringify(response), {
+                        headers: {
+                            ...corsHeaders,
+                            "Content-Type": "application/json"
+                        }
+                    });
+                } catch (aiError) {
+                    // If AI fails, return just the stats
+                    console.error('AI Analysis failed:', aiError);
+                    const fallbackResponse = {
+                        response: "AI analysis temporarily unavailable. Please try again later.",
+                        teams: teams,
+                        stats: statsData.results
+                    };
 
-                    Please provide:
-                    1. Current performance analysis for each requested team
-                    2. Their position within their respective conferences
-                    3. Notable streaks or trends
-                    4. Comparative analysis between the requested teams if multiple teams are provided`;
-
-                const messages = [
-                    { role: "system", content: "You are an esteemed basketball analyst focusing on NCAA Basketball. Provide clear, succinct analysis with specific statistics and context." },
-                    { role: "user", content: prompt },
-                ];
-
-                const aiResponse = await env.AI.run(
-                    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-                    { max_tokens: 8196, messages }
-                ) as AiTextGenerationOutput;
-
-                return new Response(JSON.stringify({
-                    response: aiResponse.response,
-                    teams: teams,
-                    filteredData
-                }), {
-                    headers: {
-                        ...corsHeaders,
-                        "Content-Type": "application/json"
-                    }
-                });
-
+                    return new Response(JSON.stringify(fallbackResponse), {
+                        headers: {
+                            ...corsHeaders,
+                            "Content-Type": "application/json"
+                        }
+                    });
+                }
             } catch (error) {
                 console.error('Error:', error);
-                return new Response(JSON.stringify({ error: error }), {
-                    status: 500,
-                    headers: {
-                        ...corsHeaders,
-                        "Content-Type": "application/json"
-                    }
+                return new Response(JSON.stringify({ 
+                    error: "Service temporarily unavailable. Please try again.",
+                    details: String(error)
+                }), {
+                    status: 503,
+                    headers: corsHeaders
                 });
             }
         }
@@ -538,16 +572,16 @@ function getHtmlForm() {
                 </div>
                 <div>
                     <label for="teams" class="block text-lg font-medium text-gray-700 mb-3 text-center">
-                        Enter Team Names (One Per Line)
+                        Enter Up to 2 Team Names (One Per Line)
                     </label>
                     <textarea 
-        id="teams" 
-        name="teams" 
-        rows="5" 
-        placeholder="Example: South Carolina 
-        Stanford 
-        UConn"
-    ></textarea>
+                        id="teams" 
+                        name="teams" 
+                        rows="2" 
+                        placeholder="Example: South Carolina 
+                        Stanford"
+                        class="min-w-[300px] w-full bg-white/50 backdrop-blur-sm border-2 border-orange-400 rounded-lg p-4 text-center text-gray-700 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                    ></textarea>
                 </div>
                 <div class="flex flex-col items-center space-y-8">
                     <button 
@@ -615,7 +649,7 @@ function getHtmlForm() {
                 document.getElementById('result').classList.remove('hidden');
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error getting analysis: ' + error.message);
+                alert('Error getting analysis: ' + JSON.stringify(error));
             } finally {
                 loadingIndicator.classList.add('hidden');
                 loadingText.style.display = 'none';
