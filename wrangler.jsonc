@@ -4,7 +4,7 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "marchmadness-browser",
+	"name": "marchmadness-data-vis-and-analysis",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-02-14",
 	"observability": {
