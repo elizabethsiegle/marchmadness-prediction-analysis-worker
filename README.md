@@ -2,6 +2,8 @@
 
 A Cloudflare Workers application that provides NCAA basketball statistics (from the NCAA website--not with scores of games being played, but only once they are finished) and AI-powered analysis for both men's and women's Division I teams.
 
+YouTube video: https://www.youtube.com/watch?v=OTvfjudifDg&t=28s
+
 ## Features
 
 - Statistics from NCAA.com (using [this NCAA API](https://github.com/henrygd/ncaa-api))
